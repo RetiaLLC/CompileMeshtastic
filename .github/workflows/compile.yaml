@@ -44,5 +44,5 @@ jobs:
 
       - name: Build nibble-screen-connect
         run: |
-          /home/runner/.platformio/penv/bin/platformio --project-dir /home/runner/meshtastic/platformio.ini -e nibble-screen-connect
+          /home/runner/.platformio/penv/bin/platformio run --project-dir /home/runner/meshtastic/platformio.ini -e nibble-screen-connect
 
