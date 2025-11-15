@@ -39,7 +39,7 @@ jobs:
 
       - name: Move retia board files 
         run: |
-          cp "$GITHUB_WORKSPACE/variants/retia-nibble /home/runner/firmware/variants/ -r
+          cp ${{ github.workspace }}/variants/retia-nibble /home/runner/firmware/variants/ -r
 
       - name: Build nibble-screen-connect
         run: |
