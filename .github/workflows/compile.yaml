@@ -28,14 +28,14 @@ jobs:
           echo "Release for this verion of meshtastic already exists. Exiting."
           exit 1
 
-      - name: Install platformIO cli 
+      - name: Install platformIO cli
         run: |
           curl -fsSL -o get-platformio.py https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
           python3 get-platformio.py
       
       - name: Install meshtastic firmware
         run: |
-          git clone https://github.com/meshtastic/firmware /home/runner/
+          git clone https://github.com/meshtastic/firmware /home/runner/meshtastic
 
       - name: Move retia board files 
         run: |
