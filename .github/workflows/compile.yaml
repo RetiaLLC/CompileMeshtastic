@@ -40,9 +40,9 @@ jobs:
 
       - name: Move retia board files 
         run: |
-          cp ${{ github.workspace }}/variants/retia-nibble /home/runner/meshtastic/firmware/variants/ -r
+          cp ${{ github.workspace }}/variants/retia-nibble /home/runner/meshtastic/variants/ -r
 
       - name: Build nibble-screen-connect
         run: |
-          /home/runner/.platformio/penv/bin/platformio /home/runner/meshtastic/firmware/platformio.ini -e nibble-screen-connect
+          /home/runner/.platformio/penv/bin/platformio /home/runner/meshtastic/platformio.ini -e nibble-screen-connect
 
