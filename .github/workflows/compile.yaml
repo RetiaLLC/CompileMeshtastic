@@ -40,7 +40,7 @@ jobs:
 
       - name: Move retia board files 
         run: |
-          cp ${{ github.workspace }}/variants/retia-nibble/home/runner/meshtastic/firmware/variants/ -r
+          cp ${{ github.workspace }}/variants/retia-nibble /home/runner/meshtastic/firmware/variants/ -r
 
       - name: Build nibble-screen-connect
         run: |
