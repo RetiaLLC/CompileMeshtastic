@@ -43,60 +43,61 @@ jobs:
         run: |
           cp ${{ github.workspace }}/variants/retia-nibble /home/runner/meshtastic/variants/ -r
       
-      - name: Make dest folder
-        run: |
-          mkdir /home/runner/dists/
   
       - name: build
         id: parallel_builds
         continu-on-error: true
         run: |
           set +e
+          
+          mkdir -p /home/runner/dists
+          : > build_status.env
+          run_build() {
+            target="$1"
+            echo "Starting build: $target"
 
-        run_build() {
-          target="$1"
-          echo "Starting build: $target"
+            /home/runner/.platformio/penv/bin/platformio run \
+              --project-dir /home/runner/meshtastic/platformio.ini \
+              -e "$target"
 
-          /home/runner/.platformio/penv/bin/platformio run \
-            --project-dir /home/runner/meshtastic/platformio.ini \
-            -e "$target"
+            status=$?
+            if [ $status -eq 0 ]; then
+              echo "$target=success" >> build_status.env
+              
+              tar -cvf "/home/runner/dists/${target}.tar" \
+                "home/runner/meshtastic/.pio/buid/${target}" >/dev/null 2>&1
 
-          status=$?
-          if [ $status -eq 0 ]; then
-            echo "$target=success" >> build_status.env
-            
-            tar -cvf "/home/runner/dists/${target}.tar" \
-              "home/runner/meshtastic/.pio/buid/${target}" >/dev/null 2>&1
+              zip -r "/home/runner/dists/${target}.zip" \
+                "/home/runner/meshtastic/.pio/build/$target" >/dev/null 2>&1
+            else
+              echo "$target=failure" >> build_status.env
+            fi
 
-            zip -r "/home/runner/dists/${target}.zip" \
-              "/home/runner/meshtastic/.pio/build/$target" >/dev/null 2>&1
-          else
-            echo "$target=failure" >> build_status.env
-          fi
+            echo "Build $target finished with status $status"
+          }
+          
+          run_build nibble-connect &
+          pid1=$!
+          
+          run_build nibble-screen-connect &
+          pid2=$!
+          
+          run_build nibble-rp2040 &
+          pid3=$!
+          
+          run_build nibble-esp32 &
+          pid4=$!
+          
 
-          echo "Build $target finished with status $status"
-        }
-        
-        run_build nibble-connect &
-        pid1=$!
-        
-        run_build nibble-screen-connect &
-        pid2=$!
-        
-        run_build nibble-rp2040 &
-        pid3=$!
-        
-        run_build nibble-esp32 &
-        pid4=$!
-        
+          wait $pid1
+          wait $pid2
+          wait $pid3
+          wait $pid4
+          
+          echo "Build summary: "
+          cat build_status.env || echo "No status file"
+          wait $pid1
 
-        wait $pid1
-        wait $pid2
-        wait $pid3
-        wait $pid4
-        
-        echo "Build summary: "
-        cat build_status.env || echo "No status file"
   build:
     runs-on: ubuntulatest
     needs: preamble
