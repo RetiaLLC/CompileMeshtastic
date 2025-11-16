@@ -57,33 +57,40 @@ jobs:
           : > build_status.env
 
           targets=(
-            nibble-connect,
-            nibble-esp32,
-            nibble-rp2040,
-            nibble-screen-connect,
+            nibble-connect
+            nibble-esp32
+            nibble-rp2040
+            nibble-screen-connect
           )
 
           for target in "${targets[@]}"; do
             echo "Building target: $target"
 
-          /home/runner/.platformio/penv/bin/platformio run \
-            --project-dir /home/runner/meshtastic/platformio.ini \
-            -e "$target"
+            /home/runner/.platformio/penv/bin/platformio run \
+              --project-dir /home/runner/meshtastic/platformio.ini \
+              -e "$target"
 
-          status=$?
-          
-          if [ $status -eq 0 ]; then
-            echo "$target=success" >> build_status.env
+            status=$?
             
-            tar -cvf "/home/runner/dists/${target}.tar" \
-              "home/runner/meshtastic/.pio/buid/${target}/*.bin" >/dev/null 2>&1
+            if [ $status -eq 0 ]; then
+              echo "$target=success" >> build_status.env
+                
+              build_dir="/home/runner/meshtastic/.pio/build/${target}"
+              bin_files=("${build_dir}"/*.bin)
+              
+              if [ ${#bin_files[@]} -wq 0 ]; then
+                echo "No bins found, skipping archive"
+                continue
+              fi
 
-            zip -r "/home/runner/dists/${target}.zip" \
-              "/home/runner/meshtastic/.pio/build/$target/*.bin" >/dev/null 2>&1
-          else
-            echo "$target=failure" >> build_status.env
-          fi
-          
+              tar -cvf "/home/runner/dists/${target}.tar" "{bin_files[@]}" >/dev/null 2>&1
+
+              zip -j "/home/runner/dists/${target}.zip" "{bin_files[@]}" >/dev/null 2>&1
+            else
+              echo "$target=failure" >> build_status.env
+            fi
+          done 
+
           echo "Build summary: "
           cat build_status.env || echo "No status file"
           
