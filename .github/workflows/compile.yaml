@@ -79,14 +79,14 @@ jobs:
               build_dir="/home/runner/meshtastic/.pio/build/${target}"
               bin_files=("${build_dir}"/*.bin)
               
-              if [ ${bin_files[@]} -wq 0 ]; then
+              if [ ${bin_files[@]} -eq 0 ]; then
                 echo "No bins found, skipping archive"
                 continue
               fi
 
-              tar -cvf "/home/runner/dists/${target}.tar" "{bin_files[@]}" >/dev/null 2>&1
+              tar -cvf "/home/runner/dists/${target}.tar" "${bin_files[@]}" >/dev/null 2>&1
 
-              zip -j "/home/runner/dists/${target}.zip" "{bin_files[@]}" >/dev/null 2>&1
+              zip -j "/home/runner/dists/${target}.zip" "${bin_files[@]}" >/dev/null 2>&1
 
             else
               echo "$target=failure" >> build_status.env
