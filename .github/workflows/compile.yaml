@@ -33,7 +33,7 @@ jobs:
         if: steps.check_release.outputs.exists == 'true'
         run: | 
           echo "Release for this version of meshtastic already exists. Exiting."
-          exit 0
+          exit 1
 
       - name: Install platformIO cli
         run: |
