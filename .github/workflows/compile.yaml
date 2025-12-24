@@ -65,6 +65,8 @@ jobs:
             nibble-esp32
             nibble-rp2040
             nibble-screen-connect
+            nibble_zero_connect
+            nugget-s3-lora
           )
 
           for target in "${targets[@]}"; do
