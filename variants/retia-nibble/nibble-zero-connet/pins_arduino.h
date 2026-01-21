@@ -1,18 +1,18 @@
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 
-#include "variant.h"
 #include <stdint.h>
+#include "variant.h"
 
 #define USB_VID 0x303a
 #define USB_PID 0x1001
 
-// The default Wire will be mapped to PMU and RTC
+// I2C
 static const uint8_t SDA = 8;
 static const uint8_t SCL = 7;
 
-// Default SPI will be mapped to Radio
-static const uint8_t SS = 10; // CS
+// SPI
+static const uint8_t SS = 10;
 static const uint8_t MOSI = 11;
 static const uint8_t MISO = 13;
 static const uint8_t SCK = 12;
@@ -22,7 +22,12 @@ static const uint8_t SCK = 12;
 #define SPI_MISO (13)
 #define SPI_CS (10)
 
-// LEDs
+// Standard Green LED (GPIO 39)
 #define LED_BUILTIN (39)
+#define BUILTIN_LED (39)
+
+// NeoPixel RGB LED (GPIO 17)
+#define RGB_BUILTIN (21)
+#define RGB_BRIGHTNESS 64
 
 #endif /* Pins_Arduino_h */
