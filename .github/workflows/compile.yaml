@@ -1,44 +1,28 @@
-name: Compile 
+name: Compile Nibble Zero
 on: 
   schedule:
     - cron: "0 10 * * *"
   workflow_dispatch:
 jobs:
   build:
-    # ubuntu-22.04 is required for the ESP32 build tools (libtinfo5)
+    # CRITICAL FIX 1: You MUST use ubuntu-22.04. 
+    # 'ubuntu-latest' is now 24.04, which breaks the ESP32 tools (mklittlefs).
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       
+      # CRITICAL FIX 2: Install libtinfo5. 
+      # This only works on ubuntu-22.04 and is required for mklittlefs.
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libtinfo5
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtinfo5
 
       - name: Get latest meshtastic version 
         id: latest_meshtastic_tag
         run: |
           result=$(curl -sL https://api.github.com/repos/meshtastic/firmware/releases/latest | jq -r '.tag_name' )
           echo "result=$result" >> $GITHUB_OUTPUT
-
-      - name: Check if release exists locally
-        id: check_release
-        env: 
-          RELEASE_TAG: ${{ steps.latest_meshtastic_tag.outputs.result }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: | 
-          set -e
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Release $RELEASE_TAG exists."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Release $RELEASE_TAG does not exists."
-          fi
-
-      - name: Exit if release already exists
-        if: steps.check_release.outputs.exists == 'true'
-        run: | 
-          echo "Release for this version of meshtastic already exists. Exiting."
-          exit 1
 
       - name: Install platformIO cli
         run: |
@@ -54,107 +38,63 @@ jobs:
           
       - name: Move retia board files 
         run: |
-          # Move variant folders contents into the variants directory
+          # Copy your variants into the firmware directory
           cp -r ${{ github.workspace }}/variants/retia-nibble/* /home/runner/meshtastic/variants/
           
-          # Move any board definition JSON files if they exist
+          # Move board definition files if they exist
           mkdir -p /home/runner/meshtastic/boards
           find ${{ github.workspace }}/variants/retia-nibble/ -name "*.json" -exec cp {} /home/runner/meshtastic/boards/ \;
       
       - name: build
-        continue-on-error: true
         run: |
-          set +e
+          # Only target the specific board you need
+          target="nibble-zero-connet"
           
-          mkdir -p /home/runner/dists
-          : > build_status.env
-
-          shopt -s nullglob
-
-          targets=(
-            nibble-connect
-            nibble-esp32
-            nibble-rp2040
-            nibble-screen-connect
-            nibble-zero-connet
-            nugget-bluetooth-rmf95
-          )
+          echo "Injecting custom environment for $target..."
           
-          echo "Injecting custom environments..."
-          for target in "${targets[@]}"; do
-            # Only merge the file content. Do NOT manually append build_flags here.
-            if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
-              echo "Merging config for $target"
-              echo "" >> /home/runner/meshtastic/platformio.ini
-              cat "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
-            fi
-          done
-
-          for target in "${targets[@]}"; do
-            echo "----------------------------------------------------"
-            echo "Building target: $target"
-            echo "----------------------------------------------------"
-
-            # FIX: Pass the include path via Environment Variable.
-            # This avoids the "Duplicate Key" error in platformio.ini while still letting the compiler find variant.h
-            export PLATFORMIO_BUILD_FLAGS="-I variants/$target"
-
-            pio run \
-              --project-dir /home/runner/meshtastic/ \
-              -e "$target"
-
-            status=$?
-            
-            if [ $status -eq 0 ]; then
-              echo "$target=success" >> build_status.env
-                
-              build_dir="/home/runner/meshtastic/.pio/build/${target}"
-              bin_files=("${build_dir}"/*.bin)
-              
-              if [ ${#bin_files[@]} -eq 0 ]; then
-                echo "No bins found for $target, skipping archive"
-                continue
-              fi
-              
-              (
-                cd "${build_dir}"
-                tar -cvf "/home/runner/dists/${target}.tar" ./*.bin >/dev/null 2>&1
-              )
-
-              zip -j "/home/runner/dists/${target}.zip" "${bin_files[@]}" >/dev/null 2>&1
-              echo "Successfully archived $target"
-
-            else
-              echo "FAILED to build $target"
-              echo "$target=failure" >> build_status.env
-            fi
-          done 
-
-          echo "Build summary: "
-          cat build_status.env || echo "No status file"
-          
-          if ! grep -q '=success' build_status.env; then
-            echo "All builds have failed."
+          # CRITICAL FIX 3: Force the environment name to match the folder name.
+          # We use sed to replace whatever [env:name] is in the file with [env:nibble-zero-connet]
+          # This fixes the "UnknownEnvNamesError" caused by the typo mismatch.
+          if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
+            echo "" >> /home/runner/meshtastic/platformio.ini
+            sed "s/\[env:.*\]/[env:$target]/" "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
+          else
+            echo "Error: Could not find platformio.ini for $target"
             exit 1
           fi
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.latest_meshtastic_tag.outputs.result }}
-          release_name: Retia binaries for Meshtastic ${{ steps.latest_meshtastic_tag.outputs.result }}
-          body: |
-            Compiled versions of [meshtastic](https://github.com/meshtastic/firmware) for use with retia boards, compiled using meshtastic release ${{ steps.latest_meshtastic_tag.outputs.result }}
-          draft: false
-          prerelease: false
+          mkdir -p /home/runner/dists
+          echo "----------------------------------------------------"
+          echo "Building target: $target"
+          echo "----------------------------------------------------"
 
-      - name: Upload binaries to release
+          # FIX 4: Use Environment Variables to inject the variant path.
+          # This allows the compiler to find 'variant.h' without modifying the INI file.
+          export PLATFORMIO_BUILD_FLAGS="-I variants/$target"
+          export PLATFORMIO_BOARD_BUILD_VARIANT="$target"
+
+          pio run \
+            --project-dir /home/runner/meshtastic/ \
+            -e "$target"
+
+          # Package the result
+          build_dir="/home/runner/meshtastic/.pio/build/${target}"
+          
+          # Check if firmware.bin exists
+          if [ -f "${build_dir}/firmware.bin" ]; then
+            cd "${build_dir}"
+            zip -j "/home/runner/dists/${target}.zip" *.bin
+            echo "Build Success!"
+          else
+            echo "Build Failed: Firmware binary not found."
+            exit 1
+          fi
+
+      - name: Upload binary to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: /home/runner/dists/*
           file_glob: true
           tag: ${{ steps.latest_meshtastic_tag.outputs.result }}
+          overwrite: true
