@@ -27,7 +27,8 @@
 #endif
 
 // --- Status LED ---
-#define PIN_LED1 39
+// Defined in platformio.ini to fix Power.cpp error
+// #define PIN_LED1 39 
 #define LED_ON 1 
 #define LED_INV 0 
 
