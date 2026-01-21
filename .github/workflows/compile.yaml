@@ -8,6 +8,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
+      # FIX 1: Install system dependency for mklittlefs (fixes "mklittlefs not found")
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libtinfo5
+
       - name: Get latest meshtastic version 
         id: latest_meshtastic_tag
         run: |
@@ -37,19 +42,23 @@ jobs:
 
       - name: Install platformIO cli
         run: |
-          curl -fsSL -o get-platformio.py https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
-          python3 get-platformio.py
+          python3 -m pip install -U platformio
       
       - name: Install meshtastic firmware
         run: |
           git clone https://github.com/meshtastic/firmware /home/runner/meshtastic
-          ls /home/runner/meshtastic
-
+      
+      # FIX 2: Pre-install the ESP32 platform to ensure tools are ready
+      - name: Install PlatformIO Platforms
+        run: |
+          pio platform install espressif32
+          
       - name: Move retia board files 
         run: |
-          cp ${{ github.workspace }}/variants/retia-nibble /home/runner/meshtastic/variants/ -r
+          # FIX 3: Use /* to copy the CONTENTS, not the folder itself.
+          # This ensures variants/nibble-zero-connet exists directly in variants/
+          cp -r ${{ github.workspace }}/variants/retia-nibble/* /home/runner/meshtastic/variants/
       
-  
       - name: build
         continue-on-error: true
         run: |
@@ -60,19 +69,32 @@ jobs:
 
           shopt -s nullglob
 
+          # FIX 4: Corrected typos in target names to match your folder names exactly
           targets=(
             nibble-connect
             nibble-esp32
             nibble-rp2040
             nibble-screen-connect
-            nibble-zero-connect 
-            nugget-blueooth-rmf95
+            nibble-zero-connet
+            nugget-bluetooth-rmf95
           )
+          
+          # FIX 5: Inject custom platformio.ini settings from your variants into the root config
+          echo "Injecting custom environments..."
+          for target in "${targets[@]}"; do
+            if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
+              echo "Merging config for $target"
+              echo "" >> /home/runner/meshtastic/platformio.ini
+              cat "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
+            fi
+          done
 
           for target in "${targets[@]}"; do
+            echo "----------------------------------------------------"
             echo "Building target: $target"
+            echo "----------------------------------------------------"
 
-            /home/runner/.platformio/penv/bin/platformio run \
+            pio run \
               --project-dir /home/runner/meshtastic/ \
               -e "$target"
 
@@ -84,8 +106,9 @@ jobs:
               build_dir="/home/runner/meshtastic/.pio/build/${target}"
               bin_files=("${build_dir}"/*.bin)
               
-              if [ ${bin_files[@]} -eq 0 ]; then
-                echo "No bins found, skipping archive"
+              # FIX 6: Correct array counting syntax to prevent crash on success
+              if [ ${#bin_files[@]} -eq 0 ]; then
+                echo "No bins found for $target, skipping archive"
                 continue
               fi
               
@@ -95,8 +118,10 @@ jobs:
               )
 
               zip -j "/home/runner/dists/${target}.zip" "${bin_files[@]}" >/dev/null 2>&1
+              echo "Successfully archived $target"
 
             else
+              echo "FAILED to build $target"
               echo "$target=failure" >> build_status.env
             fi
           done 
