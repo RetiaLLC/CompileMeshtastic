@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    # KEEP THIS: ubuntu-22.04 is required for the ESP32 build tools
+    # ubuntu-22.04 is required for the ESP32 build tools (libtinfo5)
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -54,11 +54,10 @@ jobs:
           
       - name: Move retia board files 
         run: |
-          # Move variant folders
+          # Move variant folders contents into the variants directory
           cp -r ${{ github.workspace }}/variants/retia-nibble/* /home/runner/meshtastic/variants/
           
-          # FIX 5: Also move any board definition JSON files if they exist
-          # This is critical if your variants use custom board definitions
+          # Move any board definition JSON files if they exist
           mkdir -p /home/runner/meshtastic/boards
           find ${{ github.workspace }}/variants/retia-nibble/ -name "*.json" -exec cp {} /home/runner/meshtastic/boards/ \;
       
@@ -83,15 +82,11 @@ jobs:
           
           echo "Injecting custom environments..."
           for target in "${targets[@]}"; do
+            # Only merge the file content. Do NOT manually append build_flags here.
             if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
               echo "Merging config for $target"
               echo "" >> /home/runner/meshtastic/platformio.ini
               cat "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
-              
-              # FIX 6: Force the compiler to look in the custom variant folder
-              # This solves "fatal error: variant.h: No such file"
-              echo "build_flags = \${env.build_flags} -I variants/$target" >> /home/runner/meshtastic/platformio.ini
-              echo "-L variants/$target" >> /home/runner/meshtastic/platformio.ini
             fi
           done
 
@@ -99,6 +94,10 @@ jobs:
             echo "----------------------------------------------------"
             echo "Building target: $target"
             echo "----------------------------------------------------"
+
+            # FIX: Pass the include path via Environment Variable.
+            # This avoids the "Duplicate Key" error in platformio.ini while still letting the compiler find variant.h
+            export PLATFORMIO_BUILD_FLAGS="-I variants/$target"
 
             pio run \
               --project-dir /home/runner/meshtastic/ \
