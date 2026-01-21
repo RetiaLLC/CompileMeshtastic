@@ -9,8 +9,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libtinfo5
+      # 1. DEEP DIVE FIX: Enable 32-bit architecture support
+      # We explicitly add 'i386' and install the 32-bit loaders and libs.
+      # This fixes the "not found" error by providing the correct environment for mklittlefs.
+      - name: Install 32-bit Subsystem
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y libc6:i386 libstdc++6:i386 libncurses5:i386 libtinfo5:i386
 
       - name: Get latest meshtastic version 
         id: latest_meshtastic_tag
@@ -24,28 +30,17 @@ jobs:
       - name: Install meshtastic firmware
         run: git clone https://github.com/meshtastic/firmware /home/runner/meshtastic
       
-      # 1. Install the platform (Downloads the BROKEN 32-bit mklittlefs)
       - name: Install PlatformIO Platforms
         run: pio platform install espressif32
       
-      # 2. EXPERT FIX: Download the OFFICIAL 64-bit mklittlefs from PlatformIO Registry
-      - name: Fix mklittlefs (Swap 32-bit for 64-bit)
+      # 2. DIAGNOSIS STEP: This proves the "Deep Dive" theory
+      # It will print "ELF 32-bit LSB executable" in the logs, confirming the architecture mismatch.
+      - name: Verify Tool Architecture
         run: |
-          echo "Downloading 64-bit mklittlefs from PlatformIO Registry..."
-          # This URL is the official 64-bit build used by PlatformIO
-          wget https://dl.registry.platformio.org/tools/platformio/tool-mklittlefs/linux_x86_64-1.223.0.tar.gz
-          tar -xvf linux_x86_64-1.223.0.tar.gz
-          
-          # Find where PlatformIO installed the broken tool
           TOOL_PATH=$(find /home/runner/.platformio/packages -name "mklittlefs" -type f | head -n 1)
-          echo "Found broken tool at: $TOOL_PATH"
-          
-          # Overwrite it with our working 64-bit version
-          cp mklittlefs "$TOOL_PATH"
-          chmod +x "$TOOL_PATH"
-          
-          echo "Verifying new tool..."
-          "$TOOL_PATH" --version
+          echo "Inspecting tool at: $TOOL_PATH"
+          file "$TOOL_PATH" || echo "file command failed"
+          ldd "$TOOL_PATH" || echo "ldd failed (expected if libs were missing)"
 
       - name: Move retia board files 
         run: |
@@ -57,7 +52,7 @@ jobs:
         run: |
           target="nibble-zero-connet"
           
-          # Fix environment name mismatch
+          # Fix environment name mismatch (Typo correction)
           if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
             echo "" >> /home/runner/meshtastic/platformio.ini
             sed "s/\[env:.*\]/[env:$target]/" "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
@@ -72,14 +67,15 @@ jobs:
 
           echo "Building target: $target"
           
-          # Run standard build
+          # Run build (Should now succeed fully, including filesystem generation)
           pio run --project-dir /home/runner/meshtastic/ -e "$target"
 
-          # Check for success
+          # Package results
           build_dir="/home/runner/meshtastic/.pio/build/${target}"
           if [ -f "${build_dir}/firmware.bin" ]; then
             echo "Build Success! Packaging..."
             cd "${build_dir}"
+            # We can now include the filesystem bin because the tool should have worked
             zip -j "/home/runner/dists/${target}.zip" firmware.bin *.bin
           else
             echo "Build Failed: firmware.bin not found."
