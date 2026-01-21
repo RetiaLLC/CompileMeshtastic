@@ -26,8 +26,7 @@ static const uint8_t SCK = 12;
 #define LED_BUILTIN (39)
 #define BUILTIN_LED (39)
 
-// NeoPixel (RGB) - Using 21 per your request
-// We undefine it first just in case the base ESP32 libs set it.
+// NeoPixel (RGB)
 #undef RGB_BUILTIN
 #define RGB_BUILTIN (21)
 #define RGB_BRIGHTNESS 64
