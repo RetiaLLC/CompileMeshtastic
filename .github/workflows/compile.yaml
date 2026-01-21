@@ -9,10 +9,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # 1. DEEP DIVE FIX: Enable 32-bit architecture support
-      # We explicitly add 'i386' and install the 32-bit loaders and libs.
-      # This fixes the "not found" error by providing the correct environment for mklittlefs.
-      - name: Install 32-bit Subsystem
+      # THE PRO FIX: Enable 32-bit architecture and install 32-bit loaders.
+      # This makes the 64-bit runner capable of executing the 32-bit mklittlefs tool.
+      - name: Install 32-bit Compatibility Layer
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
@@ -33,14 +32,16 @@ jobs:
       - name: Install PlatformIO Platforms
         run: pio platform install espressif32
       
-      # 2. DIAGNOSIS STEP: This proves the "Deep Dive" theory
-      # It will print "ELF 32-bit LSB executable" in the logs, confirming the architecture mismatch.
-      - name: Verify Tool Architecture
+      # DIAGNOSTIC STEP: This will verify the theory.
+      # It finds the tool and runs 'file' on it to see if it is "ELF 32-bit".
+      - name: Verify Toolchain Architecture
         run: |
           TOOL_PATH=$(find /home/runner/.platformio/packages -name "mklittlefs" -type f | head -n 1)
           echo "Inspecting tool at: $TOOL_PATH"
-          file "$TOOL_PATH" || echo "file command failed"
-          ldd "$TOOL_PATH" || echo "ldd failed (expected if libs were missing)"
+          file "$TOOL_PATH"
+          
+          echo "Checking dependencies..."
+          ldd "$TOOL_PATH" || echo "Dependency check failed (expected if loader is still missing)"
 
       - name: Move retia board files 
         run: |
@@ -52,7 +53,7 @@ jobs:
         run: |
           target="nibble-zero-connet"
           
-          # Fix environment name mismatch (Typo correction)
+          # Fix environment name mismatch
           if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
             echo "" >> /home/runner/meshtastic/platformio.ini
             sed "s/\[env:.*\]/[env:$target]/" "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
@@ -67,7 +68,7 @@ jobs:
 
           echo "Building target: $target"
           
-          # Run build (Should now succeed fully, including filesystem generation)
+          # Run standard build. Should work now that we have 32-bit support.
           pio run --project-dir /home/runner/meshtastic/ -e "$target"
 
           # Package results
@@ -75,8 +76,8 @@ jobs:
           if [ -f "${build_dir}/firmware.bin" ]; then
             echo "Build Success! Packaging..."
             cd "${build_dir}"
-            # We can now include the filesystem bin because the tool should have worked
-            zip -j "/home/runner/dists/${target}.zip" firmware.bin *.bin
+            # We can now grab ALL binaries because the build finished cleanly
+            zip -j "/home/runner/dists/${target}.zip" *.bin
           else
             echo "Build Failed: firmware.bin not found."
             exit 1
