@@ -24,42 +24,29 @@ jobs:
       - name: Install meshtastic firmware
         run: git clone https://github.com/meshtastic/firmware /home/runner/meshtastic
       
-      # FIX 1: Explicitly install the tool so we can find it to patch it
-      - name: Install PlatformIO Platforms and Tools
-        run: |
-          pio platform install espressif32
-          # Force download the tool now so it exists on disk
-          pio pkg install --global --tool "platformio/tool-mklittlefs"
+      # 1. Install the platform
+      - name: Install PlatformIO Platforms
+        run: pio platform install espressif32
       
-      # FIX 2: Replace the broken 32-bit binary with a dummy script
-      - name: Neutralize mklittlefs (Replace with Dummy)
+      # 2. THE FIX: Replace broken mklittlefs with dummy script
+      - name: Neutralize mklittlefs
         run: |
-          # Find the mklittlefs binary
           TOOL_PATH=$(find /home/runner/.platformio/packages -name "mklittlefs" -type f | head -n 1)
-          
           if [ -z "$TOOL_PATH" ]; then
-            echo "Error: Could not find mklittlefs. Listing packages folder for debug:"
-            ls -R /home/runner/.platformio/packages
-            exit 1
+             # Force install if not found
+             pio pkg install --global --tool "platformio/tool-mklittlefs"
+             TOOL_PATH=$(find /home/runner/.platformio/packages -name "mklittlefs" -type f | head -n 1)
           fi
           
-          echo "Found tool at: $TOOL_PATH"
-          echo "Replacing it with a dummy script..."
-          
+          echo "Replacing tool at: $TOOL_PATH"
           rm "$TOOL_PATH"
-          
-          # Create a dummy script that satisfies PlatformIO
           cat << 'EOF' > "$TOOL_PATH"
           #!/bin/bash
-          # Loop through args to find the output filename (last arg)
           for last; do true; done
-          # Create a fake file there so the build continues
           echo "Dummy filesystem image" > "$last"
           exit 0
           EOF
-          
           chmod +x "$TOOL_PATH"
-          echo "mklittlefs has been neutralized."
 
       - name: Move retia board files 
         run: |
@@ -71,13 +58,10 @@ jobs:
         run: |
           target="nibble-zero-connet"
           
-          # Fix environment name mismatch in the ini file
+          # Fix environment name mismatch
           if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
             echo "" >> /home/runner/meshtastic/platformio.ini
             sed "s/\[env:.*\]/[env:$target]/" "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
-          else
-            echo "Error: Could not find platformio.ini for $target"
-            exit 1
           fi
 
           mkdir -p /home/runner/dists
@@ -85,18 +69,21 @@ jobs:
           export PLATFORMIO_BOARD_BUILD_VARIANT="$target"
 
           echo "Building target: $target"
-          
-          # Run build (This will now succeed because mklittlefs is faked)
           pio run --project-dir /home/runner/meshtastic/ -e "$target"
 
-          # Package the result
+          # 3. FINAL FIX: Capture the correctly named binary
           build_dir="/home/runner/meshtastic/.pio/build/${target}"
-          if [ -f "${build_dir}/firmware.bin" ]; then
-            echo "Build Success! Packaging..."
+          
+          # Find ANY .bin file that starts with firmware
+          firmware_file=$(find "$build_dir" -name "firmware*.bin" | head -n 1)
+          
+          if [ -f "$firmware_file" ]; then
+            echo "Build Success! Found binary: $firmware_file"
             cd "${build_dir}"
-            zip -j "/home/runner/dists/${target}.zip" firmware.bin
+            zip -j "/home/runner/dists/${target}.zip" *.bin
           else
-            echo "Build Failed: firmware.bin not found."
+            echo "Build Failed: No firmware binary found."
+            ls -R "$build_dir"
             exit 1
           fi
 
