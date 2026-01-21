@@ -9,7 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # Basic dependencies for the build environment
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libtinfo5
 
@@ -25,47 +24,40 @@ jobs:
       - name: Install meshtastic firmware
         run: git clone https://github.com/meshtastic/firmware /home/runner/meshtastic
       
-      # 1. Install the platform (This downloads the broken 32-bit tool)
-      - name: Install PlatformIO Platforms
-        run: pio platform install espressif32
+      # FIX 1: Explicitly install the tool so we can find it to patch it
+      - name: Install PlatformIO Platforms and Tools
+        run: |
+          pio platform install espressif32
+          # Force download the tool now so it exists on disk
+          pio pkg install --global --tool "platformio/tool-mklittlefs"
       
-      # 2. THE FIX: Replace the broken binary with a dummy script
-      # This bypasses the architecture mismatch entirely.
+      # FIX 2: Replace the broken 32-bit binary with a dummy script
       - name: Neutralize mklittlefs (Replace with Dummy)
         run: |
           # Find the mklittlefs binary
           TOOL_PATH=$(find /home/runner/.platformio/packages -name "mklittlefs" -type f | head -n 1)
           
           if [ -z "$TOOL_PATH" ]; then
-            echo "Error: Could not find mklittlefs to replace."
+            echo "Error: Could not find mklittlefs. Listing packages folder for debug:"
+            ls -R /home/runner/.platformio/packages
             exit 1
           fi
           
-          echo "Found broken tool at: $TOOL_PATH"
+          echo "Found tool at: $TOOL_PATH"
           echo "Replacing it with a dummy script..."
           
-          # Delete the 32-bit binary
           rm "$TOOL_PATH"
           
-          # Create a script that mimics the tool:
-          # 1. It accepts arguments.
-          # 2. It finds the last argument (which is always the output filename).
-          # 3. It writes a dummy file to that path so PlatformIO sees a result.
-          # 4. It exits with code 0 (Success).
+          # Create a dummy script that satisfies PlatformIO
           cat << 'EOF' > "$TOOL_PATH"
           #!/bin/bash
-          echo "NOTE: mklittlefs dummy script running..."
-          
-          # Loop through arguments to find the last one (the output path)
+          # Loop through args to find the output filename (last arg)
           for last; do true; done
-          
-          # Create a dummy file there
+          # Create a fake file there so the build continues
           echo "Dummy filesystem image" > "$last"
-          
           exit 0
           EOF
           
-          # Make it executable
           chmod +x "$TOOL_PATH"
           echo "mklittlefs has been neutralized."
 
@@ -79,7 +71,7 @@ jobs:
         run: |
           target="nibble-zero-connet"
           
-          # Fix environment name mismatch
+          # Fix environment name mismatch in the ini file
           if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
             echo "" >> /home/runner/meshtastic/platformio.ini
             sed "s/\[env:.*\]/[env:$target]/" "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
