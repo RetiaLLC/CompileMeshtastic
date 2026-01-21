@@ -27,7 +27,7 @@
 #endif
 
 // --- Status LED ---
-// Defined in platformio.ini to fix Power.cpp error
+// NOTE: PIN_LED1 is defined in platformio.ini to ensure it is visible to all files.
 // #define PIN_LED1 39 
 #define LED_ON 1 
 #define LED_INV 0 
@@ -36,7 +36,7 @@
 #define BUTTON_PIN 1
 #define BUTTON_NEED_PULLUP
 
-// --- Input Broker (Virtual Trackball) ---
+// --- Virtual Trackball (Input Broker) ---
 #define HAS_TRACKBALL 1
 #define TB_UP 40      
 #define TB_DOWN 45    
@@ -45,7 +45,7 @@
 #define TB_PRESS 2    
 #define TB_DIRECTION FALLING 
 
-// --- Safety for Flipper ---
+// --- Safety for Flipper (Pin 18) ---
 #define PIN_FLIPPER_DETECT 18
 
 #endif
