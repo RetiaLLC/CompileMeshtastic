@@ -5,11 +5,12 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # FIX: Use ubuntu-22.04 because 'latest' (24.04) removed libtinfo5 support
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       
-      # FIX 1: Install system dependency for mklittlefs (fixes "mklittlefs not found")
+      # Now this will work because ubuntu-22.04 has this package
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libtinfo5
 
@@ -48,14 +49,14 @@ jobs:
         run: |
           git clone https://github.com/meshtastic/firmware /home/runner/meshtastic
       
-      # FIX 2: Pre-install the ESP32 platform to ensure tools are ready
+      # Pre-install the ESP32 platform to ensure tools are ready
       - name: Install PlatformIO Platforms
         run: |
           pio platform install espressif32
           
       - name: Move retia board files 
         run: |
-          # FIX 3: Use /* to copy the CONTENTS, not the folder itself.
+          # Use /* to copy the CONTENTS, not the folder itself.
           # This ensures variants/nibble-zero-connet exists directly in variants/
           cp -r ${{ github.workspace }}/variants/retia-nibble/* /home/runner/meshtastic/variants/
       
@@ -69,7 +70,7 @@ jobs:
 
           shopt -s nullglob
 
-          # FIX 4: Corrected typos in target names to match your folder names exactly
+          # Corrected target names
           targets=(
             nibble-connect
             nibble-esp32
@@ -79,7 +80,7 @@ jobs:
             nugget-bluetooth-rmf95
           )
           
-          # FIX 5: Inject custom platformio.ini settings from your variants into the root config
+          # Inject custom platformio.ini settings from your variants into the root config
           echo "Injecting custom environments..."
           for target in "${targets[@]}"; do
             if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
@@ -106,7 +107,7 @@ jobs:
               build_dir="/home/runner/meshtastic/.pio/build/${target}"
               bin_files=("${build_dir}"/*.bin)
               
-              # FIX 6: Correct array counting syntax to prevent crash on success
+              # Check array length properly
               if [ ${#bin_files[@]} -eq 0 ]; then
                 echo "No bins found for $target, skipping archive"
                 continue
