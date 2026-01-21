@@ -5,18 +5,16 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    # CRITICAL FIX 1: You MUST use ubuntu-22.04. 
-    # 'ubuntu-latest' is now 24.04, which breaks the ESP32 tools (mklittlefs).
+    # CRITICAL: Must be ubuntu-22.04 to support the mklittlefs tool
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       
-      # CRITICAL FIX 2: Install libtinfo5. 
-      # This only works on ubuntu-22.04 and is required for mklittlefs.
+      # Install the library missing from Linux that causes "mklittlefs not found"
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libtinfo5
+          sudo apt-get install -y libtinfo5 libncurses5
 
       - name: Get latest meshtastic version 
         id: latest_meshtastic_tag
@@ -38,25 +36,22 @@ jobs:
           
       - name: Move retia board files 
         run: |
-          # Copy your variants into the firmware directory
-          cp -r ${{ github.workspace }}/variants/retia-nibble/* /home/runner/meshtastic/variants/
+          # Copy your variant folder
+          cp -r ${{ github.workspace }}/variants/retia-nibble/nibble-zero-connet /home/runner/meshtastic/variants/
           
           # Move board definition files if they exist
           mkdir -p /home/runner/meshtastic/boards
           find ${{ github.workspace }}/variants/retia-nibble/ -name "*.json" -exec cp {} /home/runner/meshtastic/boards/ \;
       
-      - name: build
+      - name: Build nibble-zero-connet
         run: |
-          # Only target the specific board you need
           target="nibble-zero-connet"
           
-          echo "Injecting custom environment for $target..."
-          
-          # CRITICAL FIX 3: Force the environment name to match the folder name.
-          # We use sed to replace whatever [env:name] is in the file with [env:nibble-zero-connet]
-          # This fixes the "UnknownEnvNamesError" caused by the typo mismatch.
+          # 1. Add [env:nibble-zero-connet] to platformio.ini
+          # We rename whatever environment name is inside your file to match the folder name exactly
           if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
             echo "" >> /home/runner/meshtastic/platformio.ini
+            # This sed command forces the env name in the file to match the target variable
             sed "s/\[env:.*\]/[env:$target]/" "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
           else
             echo "Error: Could not find platformio.ini for $target"
@@ -64,23 +59,18 @@ jobs:
           fi
 
           mkdir -p /home/runner/dists
-          echo "----------------------------------------------------"
-          echo "Building target: $target"
-          echo "----------------------------------------------------"
-
-          # FIX 4: Use Environment Variables to inject the variant path.
-          # This allows the compiler to find 'variant.h' without modifying the INI file.
+          
+          # 2. Set environment variables to tell PlatformIO where to look for variant headers
           export PLATFORMIO_BUILD_FLAGS="-I variants/$target"
           export PLATFORMIO_BOARD_BUILD_VARIANT="$target"
 
+          echo "Building target: $target"
           pio run \
             --project-dir /home/runner/meshtastic/ \
             -e "$target"
 
-          # Package the result
+          # 3. Zip the result
           build_dir="/home/runner/meshtastic/.pio/build/${target}"
-          
-          # Check if firmware.bin exists
           if [ -f "${build_dir}/firmware.bin" ]; then
             cd "${build_dir}"
             zip -j "/home/runner/dists/${target}.zip" *.bin
@@ -90,11 +80,23 @@ jobs:
             exit 1
           fi
 
-      - name: Upload binary to release
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.latest_meshtastic_tag.outputs.result }}
+          release_name: Retia binaries for Meshtastic ${{ steps.latest_meshtastic_tag.outputs.result }}
+          body: |
+            Compiled nibble-zero-connet using meshtastic release ${{ steps.latest_meshtastic_tag.outputs.result }}
+          draft: false
+          prerelease: false
+
+      - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: /home/runner/dists/*
           file_glob: true
           tag: ${{ steps.latest_meshtastic_tag.outputs.result }}
-          overwrite: true
