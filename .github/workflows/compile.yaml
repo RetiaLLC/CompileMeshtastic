@@ -5,12 +5,11 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    # FIX: Use ubuntu-22.04 because 'latest' (24.04) removed libtinfo5 support
+    # KEEP THIS: ubuntu-22.04 is required for the ESP32 build tools
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       
-      # Now this will work because ubuntu-22.04 has this package
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libtinfo5
 
@@ -49,16 +48,19 @@ jobs:
         run: |
           git clone https://github.com/meshtastic/firmware /home/runner/meshtastic
       
-      # Pre-install the ESP32 platform to ensure tools are ready
       - name: Install PlatformIO Platforms
         run: |
           pio platform install espressif32
           
       - name: Move retia board files 
         run: |
-          # Use /* to copy the CONTENTS, not the folder itself.
-          # This ensures variants/nibble-zero-connet exists directly in variants/
+          # Move variant folders
           cp -r ${{ github.workspace }}/variants/retia-nibble/* /home/runner/meshtastic/variants/
+          
+          # FIX 5: Also move any board definition JSON files if they exist
+          # This is critical if your variants use custom board definitions
+          mkdir -p /home/runner/meshtastic/boards
+          find ${{ github.workspace }}/variants/retia-nibble/ -name "*.json" -exec cp {} /home/runner/meshtastic/boards/ \;
       
       - name: build
         continue-on-error: true
@@ -70,7 +72,6 @@ jobs:
 
           shopt -s nullglob
 
-          # Corrected target names
           targets=(
             nibble-connect
             nibble-esp32
@@ -80,13 +81,17 @@ jobs:
             nugget-bluetooth-rmf95
           )
           
-          # Inject custom platformio.ini settings from your variants into the root config
           echo "Injecting custom environments..."
           for target in "${targets[@]}"; do
             if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
               echo "Merging config for $target"
               echo "" >> /home/runner/meshtastic/platformio.ini
               cat "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
+              
+              # FIX 6: Force the compiler to look in the custom variant folder
+              # This solves "fatal error: variant.h: No such file"
+              echo "build_flags = \${env.build_flags} -I variants/$target" >> /home/runner/meshtastic/platformio.ini
+              echo "-L variants/$target" >> /home/runner/meshtastic/platformio.ini
             fi
           done
 
@@ -107,7 +112,6 @@ jobs:
               build_dir="/home/runner/meshtastic/.pio/build/${target}"
               bin_files=("${build_dir}"/*.bin)
               
-              # Check array length properly
               if [ ${#bin_files[@]} -eq 0 ]; then
                 echo "No bins found for $target, skipping archive"
                 continue
