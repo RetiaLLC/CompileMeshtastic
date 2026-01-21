@@ -22,11 +22,13 @@ static const uint8_t SCK = 12;
 #define SPI_MISO (13)
 #define SPI_CS (10)
 
-// Standard Green LED (GPIO 39)
+// Standard Green LED
 #define LED_BUILTIN (39)
 #define BUILTIN_LED (39)
 
-// NeoPixel RGB LED (GPIO 17)
+// NeoPixel (RGB) - Using 21 per your request
+// We undefine it first just in case the base ESP32 libs set it.
+#undef RGB_BUILTIN
 #define RGB_BUILTIN (21)
 #define RGB_BRIGHTNESS 64
 
