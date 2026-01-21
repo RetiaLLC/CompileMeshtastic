@@ -5,17 +5,17 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    # FIX 1: Use ubuntu-22.04 so the job starts immediately.
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       
-      # FIX 2: Install 32-bit libraries. 
-      # This gives mklittlefs the best chance of working on 22.04.
-      - name: Install dependencies
+      # THE REAL FIX: Enable 32-bit architecture and install 32-bit libs.
+      # This allows the 32-bit 'mklittlefs' tool to run on the 64-bit runner.
+      - name: Install 32-bit Compatibility Libraries
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y libtinfo5 libncurses5 libc6-i386
+          sudo apt-get install -y libc6:i386 libstdc++6:i386 libncurses5:i386 libtinfo5:i386
 
       - name: Get latest meshtastic version 
         id: latest_meshtastic_tag
@@ -37,10 +37,7 @@ jobs:
           
       - name: Move retia board files 
         run: |
-          # Copy your variant folder
           cp -r ${{ github.workspace }}/variants/retia-nibble/nibble-zero-connet /home/runner/meshtastic/variants/
-          
-          # Move board definition files
           mkdir -p /home/runner/meshtastic/boards
           find ${{ github.workspace }}/variants/retia-nibble/ -name "*.json" -exec cp {} /home/runner/meshtastic/boards/ \;
       
@@ -48,7 +45,7 @@ jobs:
         run: |
           target="nibble-zero-connet"
           
-          # 1. Force the environment name in platformio.ini to match your folder name
+          # Force environment name match
           if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
             echo "" >> /home/runner/meshtastic/platformio.ini
             sed "s/\[env:.*\]/[env:$target]/" "/home/runner/meshtastic/variants/$target/platformio.ini" >> /home/runner/meshtastic/platformio.ini
@@ -59,25 +56,25 @@ jobs:
 
           mkdir -p /home/runner/dists
           
-          # 2. Set environment variables to inject custom variant folder path
+          # Inject variant path
           export PLATFORMIO_BUILD_FLAGS="-I variants/$target"
           export PLATFORMIO_BOARD_BUILD_VARIANT="$target"
 
           echo "Building target: $target"
           
-          # FIX 3: Run build but allow failure (|| echo ...)
-          # If mklittlefs crashes, the script continues so we can check for the binary.
-          pio run --project-dir /home/runner/meshtastic/ -e "$target" || echo "PIO build finished with errors (checking for binary...)"
+          # Standard build command. Should now succeed fully.
+          pio run --project-dir /home/runner/meshtastic/ -e "$target"
 
-          # 3. Rescue the firmware binary
+          # Package results
           build_dir="/home/runner/meshtastic/.pio/build/${target}"
           
           if [ -f "${build_dir}/firmware.bin" ]; then
-            echo "SUCCESS: Firmware binary found! Packaging..."
+            echo "Build Success! Packaging..."
             cd "${build_dir}"
-            zip -j "/home/runner/dists/${target}.zip" firmware.bin
+            # Zip the firmware AND the filesystem image (since it will now exist)
+            zip -j "/home/runner/dists/${target}.zip" firmware.bin *.bin
           else
-            echo "FAILURE: firmware.bin was not generated. Real compilation error occurred."
+            echo "Build Failed: firmware.bin not found."
             exit 1
           fi
 
