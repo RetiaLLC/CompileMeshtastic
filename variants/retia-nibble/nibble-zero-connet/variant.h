@@ -29,5 +29,3 @@
 
 // --- Safety for Flipper (Pin 18) ---
 #define PIN_FLIPPER_DETECT 18
-
-#endif
