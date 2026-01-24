@@ -50,13 +50,13 @@ jobs:
 
       - name: Move retia board files 
         run: |
-          cp -r ${{ github.workspace }}/variants/retia-nibble/nibble-zero-connet /home/runner/meshtastic/variants/
+          cp -r ${{ github.workspace }}/variants/retia-nibble/nibble-zero-connect /home/runner/meshtastic/variants/
           mkdir -p /home/runner/meshtastic/boards
           find ${{ github.workspace }}/variants/retia-nibble/ -name "*.json" -exec cp {} /home/runner/meshtastic/boards/ \;
       
-      - name: Build nibble-zero-connet
+      - name: Build nibble-zero-connect
         run: |
-          target="nibble-zero-connet"
+          target="nibble-zero-connect"
           
           # Fix environment name mismatch
           if [ -f "/home/runner/meshtastic/variants/$target/platformio.ini" ]; then
@@ -96,7 +96,7 @@ jobs:
           tag_name: ${{ steps.latest_meshtastic_tag.outputs.result }}
           release_name: Retia binaries for Meshtastic ${{ steps.latest_meshtastic_tag.outputs.result }}
           body: |
-            Compiled nibble-zero-connet using meshtastic release ${{ steps.latest_meshtastic_tag.outputs.result }}
+            Compiled nibble-zero-connect using meshtastic release ${{ steps.latest_meshtastic_tag.outputs.result }}
           draft: false
           prerelease: false
 
