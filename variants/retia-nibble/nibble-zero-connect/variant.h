@@ -20,10 +20,10 @@
 
 // --- Virtual Trackball (Input Broker) ---
 #define HAS_TRACKBALL 1
-#define TB_UP 40      
-#define TB_DOWN 45    
-#define TB_LEFT 41    
-#define TB_RIGHT 42   
+#define TB_LEFT 40    
+#define TB_DOWN 41    
+#define TB_UP 42    
+#define TB_RIGHT 45   
 #define TB_PRESS 2    
 #define TB_DIRECTION FALLING 
 
