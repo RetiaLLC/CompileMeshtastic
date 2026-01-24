@@ -28,4 +28,14 @@
 #define TB_DIRECTION FALLING 
 
 // --- Safety for Flipper (Pin 18) ---
-#define PIN_FLIPPER_DETECT 18
+// #define PIN_FLIPPER_DETECT 18
+
+// Disable conflicting peripherals on Pin 18
+#define RX1 -1
+#define TX1 -1
+#define RX2 -1
+#define TX2 -1
+#define I2S_SD -1
+#define I2S_WS -1
+#define I2S_SCK -1
+#define I2S_BCK -1
